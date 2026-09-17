@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { margin: 0; overflow: hidden; background-color: transparent; }
+        canvas { display: block; }
+        /* 簡單的對話框樣式 */
+        #dialog {
+            position: absolute; top: 20px; left: 20px; right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px; padding: 10px;
+            font-family: sans-serif; font-weight: bold;
+            display: none; pointer-events: none;
+        }
+
+        /* ================= 手机面板（参考 dsh-pet shared-core.js 的 mountPetPhone 简化重写） ================= */
+        .pet-phone {
+            position: fixed;
+            z-index: 999;
+            width: 220px;
+            box-sizing: border-box;
+            padding: 10px 10px 14px;
+            border-radius: 30px;
+            background: linear-gradient(180deg, #232838, #171a24);
+            box-shadow: 0 14px 38px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.06);
+            font-family: 'Microsoft YaHei UI', 'Segoe UI', sans-serif;
+            color: #e9eeff;
+            display: none;
+            opacity: 0;
+            transform: translateY(14px) scale(.94);
+            transition: opacity .18s ease, transform .18s ease;
+        }
+        .pet-phone.is-open { display: block; }
+        .pet-phone.is-on { opacity: 1; transform: none; }
+        .pet-phone * { box-sizing: border-box; }
+        .pet-phone-notch {
+            width: 54px; height: 12px; margin: 0 auto 8px;
+            border-radius: 8px; background: #080a10;
+        }
+        .pet-phone-card {
+            border-radius: 18px; padding: 12px;
+            background: linear-gradient(135deg, #3a4a7a, #6a3f7a);
+            display: flex; align-items: center; gap: 10px;
+        }
+        .pet-phone-avatar {
+            width: 44px; height: 44px; border-radius: 50%;
+            background: #fff3; flex: 0 0 auto;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+        }
+        .pet-phone-name { font-size: 14px; font-weight: 700; }
+        .pet-phone-sub { font-size: 11px; opacity: .7; margin-top: 2px; }
+        .pet-phone-weather {
+            margin-top: 8px; display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 9px; border-radius: 12px; background: rgba(255,255,255,.14);
+            font-size: 12px; cursor: pointer;
+        }
+        .pet-phone-weather:hover { background: rgba(255,255,255,.22); }
+        .pet-phone-grid {
+            margin-top: 12px; display: grid; grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .pet-phone-tile {
+            display: flex; flex-direction: column; align-items: center; gap: 5px;
+            cursor: pointer; padding: 4px 0; border-radius: 12px;
+        }
+        .pet-phone-tile:hover { background: rgba(255,255,255,.08); }
+        .pet-phone-tile-ico {
+            width: 38px; height: 38px; border-radius: 50%;
+            background: rgba(255,255,255,.1);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 17px;
+        }
+        .pet-phone-tile-label { font-size: 10.5px; opacity: .85; }
+
+        /* ---- 手机里的聊天訊息串（跟浮動氣泡是兩回事，只在手機螢幕裡出現） ---- */
+        .pet-phone-screen { display: block; }
+        .pet-phone-screen.is-hidden { display: none; }
+        .pet-phone-chat-head {
+            display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+            font-size: 12px; cursor: pointer; opacity: .8;
+        }
+        .pet-phone-chat-head:hover { opacity: 1; }
+        .pet-phone-msgs {
+            height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 7px;
+            padding: 2px 2px 6px;
+        }
+        .pet-phone-msgs::-webkit-scrollbar { width: 4px; }
+        .pet-phone-msgs::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 3px; }
+        .pet-msg {
+            max-width: 78%; padding: 7px 10px; border-radius: 14px; font-size: 12.5px; line-height: 1.5;
+            word-break: break-word;
+        }
+        .pet-msg.is-me {
+            align-self: flex-end; background: #4a7dff; color: #fff; border-bottom-right-radius: 4px;
+        }
+        .pet-msg.is-her {
+            align-self: flex-start; background: rgba(255,255,255,.12); border-bottom-left-radius: 4px;
+        }
+        .pet-msg.is-typing { opacity: .6; font-style: italic; }
+        .pet-phone-chat-input-row {
+            margin-top: 8px; display: flex; gap: 6px;
+        }
+        .pet-phone-chat-input {
+            flex: 1 1 auto; border: none; outline: none; border-radius: 14px;
+            padding: 8px 10px; font-size: 12.5px; background: rgba(255,255,255,.12); color: #fff;
+        }
+        .pet-phone-chat-input::placeholder { color: rgba(255,255,255,.4); }
+        .pet-phone-chat-send {
+            flex: 0 0 auto; border: none; outline: none; border-radius: 14px; padding: 0 14px;
+            background: #4a7dff; color: #fff; font-size: 12.5px; cursor: pointer;
+        }
+        .pet-phone-chat-send:active { background: #3a68e0; }
+
+        /* ================= 天气面板 ================= */
+        .pet-weather-panel {
+            position: fixed;
+            z-index: 999;
+            width: 220px;
+            padding: 16px;
+            border-radius: 24px;
+            background: linear-gradient(180deg, #2b4a7a, #16233a);
+            color: #eef3ff;
+            font-family: 'Microsoft YaHei UI', 'Segoe UI', sans-serif;
+            box-shadow: 0 14px 38px rgba(0,0,0,.4);
+            display: none;
+            opacity: 0;
+            transform: translateY(14px) scale(.94);
+            transition: opacity .18s ease, transform .18s ease;
+        }
+        .pet-weather-panel.is-open { display: block; }
+        .pet-weather-panel.is-on { opacity: 1; transform: none; }
+        .pet-weather-temp { font-size: 34px; font-weight: 700; }
+        .pet-weather-sub { font-size: 12px; opacity: .75; margin-top: 4px; }
+        .pet-weather-back {
+            margin-top: 12px; font-size: 12px; opacity: .7; cursor: pointer;
+        }
+        .pet-weather-back:hover { opacity: 1; }
+        .pet-weather-err { font-size: 12px; color: #ffb4a8; }
+    </style>
+    <!-- 載入 Cubism Core, PixiJS 與 pixi-live2d-display（只需要 Cubism 4，不用完整版） -->
+    <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.2/dist/browser/pixi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+    <!-- 載入 Qt QWebChannel -->
+    <script src="qwebchannel.js"></script>
+</head>
+<body>
+    <div id="dialog"></div>
+    <canvas id="canvas"></canvas>
+
+    <!-- 手机面板 -->
+    <div id="petPhone" class="pet-phone">
+        <div class="pet-phone-notch"></div>
+
+        <!-- 主畫面 -->
+        <div id="petPhoneHome" class="pet-phone-screen">
+            <div class="pet-phone-card">
+                <div class="pet-phone-avatar">🐋</div>
+                <div>
+                    <div class="pet-phone-name" id="petPhoneName">心宜</div>
+                    <div class="pet-phone-sub">桌面小太陽 · 陪伴中</div>
+                    <div class="pet-phone-weather" id="petPhoneWeatherBtn">🌤️ <span id="petPhoneWeatherText">查看天氣</span></div>
+                </div>
+            </div>
+            <div class="pet-phone-grid">
+                <div class="pet-phone-tile" data-action="chat">
+                    <div class="pet-phone-tile-ico">💬</div>
+                    <div class="pet-phone-tile-label">傳訊息</div>
+                </div>
+                <div class="pet-phone-tile" data-action="home">
+                    <div class="pet-phone-tile-ico">🏠</div>
+                    <div class="pet-phone-tile-label">回原位</div>
+                </div>
+                <div class="pet-phone-tile" data-action="close">
+                    <div class="pet-phone-tile-ico">🔌</div>
+                    <div class="pet-phone-tile-label">收起</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 聊天訊息串（獨立於浮動氣泡，只有手機開著才看得到） -->
+        <div id="petPhoneChat" class="pet-phone-screen is-hidden">
+            <div class="pet-phone-chat-head" id="petPhoneChatBack">← 返回</div>
+            <div class="pet-phone-msgs" id="petPhoneMsgs"></div>
+            <div class="pet-phone-chat-input-row">
+                <input class="pet-phone-chat-input" id="petPhoneChatInput" type="text" placeholder="傳訊息給她…" />
+                <button class="pet-phone-chat-send" id="petPhoneChatSend">送出</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 天气面板 -->
+    <div id="petWeather" class="pet-weather-panel">
+        <div id="petWeatherBody">載入中...</div>
+        <div class="pet-weather-back" id="petWeatherBack">← 返回手機</div>
+    </div>
+
+    <script>
+        // 1. 先把接收 Python 訊號的介面準備好，掛在全域變數 window 上
+        window.currentModel = null;
+
+        window.playAction = function(emotion, text) {
+            console.log("收到 Python 動作與對話指令:", emotion, text);
+
+            const dialog = document.getElementById('dialog');
+            dialog.innerText = text;
+            dialog.style.display = 'block';
+            setTimeout(() => { dialog.style.display = 'none'; }, 3000);
+
+            if (window.currentModel) {
+                if (emotion === 'happy') {
+                    window.currentModel.motion('TapBody');
+                } else if (emotion === 'angry') {
+                    window.currentModel.expression('angry');
+                } else {
+                    window.currentModel.motion('Idle');
+                }
+            }
+        };
+
+        // 2. 建立與 Python 的通訊連線
+        new QWebChannel(qt.webChannelTransport, function (channel) {
+            window.backend_bridge = channel.objects.backend_bridge;
+            console.log("與 Python 連線成功！");
+        });
+
+        // ================= 手机面板 + 天气面板（右键掏出来的那套） =================
+        const petPhoneEl = document.getElementById('petPhone');
+        const petWeatherEl = document.getElementById('petWeather');
+        const weatherCodeText = (code) => {
+            // 简化版 WMO weather_code 对照，够用即可，要更细可以再扩充
+            if (code === 0) return '晴朗';
+            if ([1, 2, 3].includes(code)) return '多雲';
+            if ([45, 48].includes(code)) return '有霧';
+            if ([51, 53, 55, 61, 63, 65].includes(code)) return '下雨';
+            if ([71, 73, 75, 77].includes(code)) return '下雪';
+            if ([80, 81, 82].includes(code)) return '陣雨';
+            if ([95, 96, 99].includes(code)) return '雷雨';
+            return '天氣狀況未知';
+        };
+
+        function openPetPanel(el, x, y) {
+            const pad = 16;
+            const w = 220;
+            let left = x, top = y;
+            if (left + w + pad > window.innerWidth) left = window.innerWidth - w - pad;
+            if (top + 260 + pad > window.innerHeight) top = window.innerHeight - 260 - pad;
+            left = Math.max(pad, left);
+            top = Math.max(pad, top);
+            el.style.left = left + 'px';
+            el.style.top = top + 'px';
+            el.classList.add('is-open');
+            // 用 rAF 让 display:block 先生效，再加 is-on 触发过渡动画
+            requestAnimationFrame(() => el.classList.add('is-on'));
+        }
+        function closePetPanel(el) {
+            el.classList.remove('is-on');
+            setTimeout(() => el.classList.remove('is-open'), 180);
+        }
+
+        function openPhone(x, y) {
+            closePetPanel(petWeatherEl);
+            openPetPanel(petPhoneEl, x, y);
+            showPhoneScreen('home'); // 每次掏出手机先回到主画面；聊天記錄還在，只是先不顯示
+        }
+        function closePhone() { closePetPanel(petPhoneEl); }
+
+        function openWeather() {
+            closePetPanel(petPhoneEl);
+            const body = document.getElementById('petWeatherBody');
+            body.innerHTML = '載入中...';
+            openPetPanel(petWeatherEl, parseFloat(petPhoneEl.style.left) || 40, parseFloat(petPhoneEl.style.top) || 40);
+
+            if (!window.backend_bridge || typeof window.backend_bridge.get_weather !== 'function') {
+                body.innerHTML = '<div class="pet-weather-err">尚未連上 Python 後端</div>';
+                return;
+            }
+            window.backend_bridge.get_weather(function (raw) {
+                try {
+                    const w = JSON.parse(raw);
+                    if (!w.ok) throw new Error(w.error || 'unknown');
+                    body.innerHTML =
+                        '<div class="pet-weather-temp">' + Math.round(w.temp) + '°C</div>' +
+                        '<div class="pet-weather-sub">' + weatherCodeText(w.code) + ' · 濕度 ' + w.humidity + '%</div>';
+                } catch (e) {
+                    body.innerHTML = '<div class="pet-weather-err">天氣讀取失敗：' + e.message + '</div>';
+                }
+            });
+        }
+        function closeWeather() { closePetPanel(petWeatherEl); }
+
+        document.getElementById('petPhoneWeatherBtn').addEventListener('click', openWeather);
+        document.getElementById('petWeatherBack').addEventListener('click', () => {
+            closeWeather();
+            openPhone(parseFloat(petWeatherEl.style.left) || 40, parseFloat(petWeatherEl.style.top) || 40);
+        });
+
+        // ---- 手机里的两个「畫面」切換：主畫面 / 聊天訊息串（跟浮動氣泡完全獨立的通道）----
+        const petPhoneHomeEl = document.getElementById('petPhoneHome');
+        const petPhoneChatEl = document.getElementById('petPhoneChat');
+        function showPhoneScreen(name) {
+            petPhoneHomeEl.classList.toggle('is-hidden', name !== 'home');
+            petPhoneChatEl.classList.toggle('is-hidden', name !== 'chat');
+        }
+
+        document.querySelectorAll('.pet-phone-tile').forEach((tile) => {
+            tile.addEventListener('click', () => {
+                const action = tile.dataset.action;
+                if (action === 'chat') {
+                    showPhoneScreen('chat');
+                    document.getElementById('petPhoneChatInput').focus();
+                } else if (action === 'home') {
+                    closePhone();
+                    window.playAction('happy', '這就回去啦！');
+                    // TODO: 呼叫 backend_bridge 的回到初始位置 slot（需要在 main.py 加一个对应方法）
+                } else if (action === 'close') {
+                    closePhone();
+                }
+            });
+        });
+
+        document.getElementById('petPhoneChatBack').addEventListener('click', () => showPhoneScreen('home'));
+
+        // ---- 聊天訊息串本體：送出/接收都走這裡，絕不觸發浮動氣泡（#dialog） ----
+        const msgsEl = document.getElementById('petPhoneMsgs');
+        function appendMsg(who, text) {
+            const div = document.createElement('div');
+            div.className = 'pet-msg ' + (who === 'me' ? 'is-me' : 'is-her');
+            div.textContent = text;
+            msgsEl.appendChild(div);
+            msgsEl.scrollTop = msgsEl.scrollHeight;
+            return div;
+        }
+        let typingEl = null;
+        function setTyping(on) {
+            if (on && !typingEl) {
+                typingEl = appendMsg('her', '她正在輸入…');
+                typingEl.classList.add('is-typing');
+            } else if (!on && typingEl) {
+                typingEl.remove();
+                typingEl = null;
+            }
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById('petPhoneChatInput');
+            const text = input.value.trim();
+            if (!text) return;
+            appendMsg('me', text);
+            input.value = '';
+            setTyping(true);
+            if (window.backend_bridge && typeof window.backend_bridge.send_chat_message === 'function') {
+                window.backend_bridge.send_chat_message(text);
+            } else {
+                setTyping(false);
+                appendMsg('her', '（還沒連上後端，訊息送不出去…）');
+            }
+        }
+        document.getElementById('petPhoneChatSend').addEventListener('click', sendChatMessage);
+        document.getElementById('petPhoneChatInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendChatMessage();
+        });
+
+        // Python 端 ChatWorker 跑完後，經 runJavaScript 呼叫這個函式把回覆推進訊息串——
+        // 注意這裡完全不碰 #dialog / playAction，聊天回覆只出現在手機裡
+        window.receiveChatReply = function (emotion, text) {
+            setTyping(false);
+            appendMsg('her', text);
+            // 想讓 Live2D 模型也跟著做點小動作（不冒氣泡）可以留著這行；不需要的話刪掉即可
+            if (window.currentModel && emotion === 'happy') {
+                window.currentModel.motion('TapBody');
+            }
+        };
+
+        // 右键 = 掏手机（取代原本 Qt 原生右键菜单；Python 端已把 contextMenuPolicy 设为 NoContextMenu）
+        document.body.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (petPhoneEl.classList.contains('is-open')) {
+                closePhone();
+            } else {
+                openPhone(e.clientX, e.clientY);
+            }
+        });
+
+        // 3. 確保網頁資源都載入完畢，才開始執行 PIXI
+        window.onload = function() {
+            if (typeof PIXI === 'undefined') {
+                console.error("PIXI 載入失敗！可能是網路較慢或被防火牆阻擋。");
+                return;
+            }
+
+            const app = new PIXI.Application({
+                view: document.getElementById('canvas'),
+                autoStart: true,
+                transparent: true,
+                width: 400,
+                height: 500
+            });
+
+            const modelUrl = "assets/hijiki/runtime/hijiki.model3.json";
+
+            PIXI.live2d.Live2DModel.from(modelUrl).then(model => {
+                window.currentModel = model;
+                app.stage.addChild(model);
+                model.scale.set(0.2);
+            }).catch(err => {
+                console.error("模型載入失敗！請檢查 assets 資料夾路徑是否正確:", err);
+            });
+        };
+    </script>
+</body>
+</html>
